@@ -1,0 +1,17 @@
+{
+  "name": "test",
+  "version": "1.12.3",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "umi test"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@testing-library/react": "^8.0.4",
+    "react": "^16.8.6",
+    "react-dom": "^16.8.6",
+    "umi-test": "^1.6.1"
+  }
+}
