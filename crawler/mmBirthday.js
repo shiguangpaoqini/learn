@@ -1,3 +1,8 @@
+/**
+ * 爬取 “微博搞笑排行榜” 下交友微博
+ * 可扩展至爬取指定微博，指定评论下的二级评论
+ */
+
 const request = require ('request');
 const Async = require ('async');
 const fs = require ('fs');
@@ -6,26 +11,23 @@ const xlsx = require ('node-xlsx');
 const puppeteer = require ('puppeteer');
 
 const crawler = async query => {
-  const browser = await puppeteer.launch ({headless: false});
+  const browser = await puppeteer.launch ({headless: true});
   const page = await browser.newPage ();
   let _data;
 
-  let currentComment;
   const oneLevelCommentsCls = '.repeat_list .list_ul .list_li';
   const twoLevelCommentsCls =
     '.repeat_list .list_ul .list_li .list_box_in .list_li';
-  const moreTwoLevelCommentsCls =
-    '.repeat_list .list_ul .list_li .list_box_in .list_li_v2';
 
   page.on ('console', msg => {
-    let log = 'PageConsole:';
+    let log = 'page:';
     for (let i = 0; i < msg.args ().length; ++i)
       log += msg.args ()[i].toString ().replace ('JSHandle:', '');
     console.log (log);
   });
 
   await page.goto (
-    `https://weibo.com/1713926427/IlPPEhLH3?filter=hot&root_comment_id=0&type=comment#_rnd1577001553165`
+    `https://weibo.com/1713926427/IlPPEhLH3?type=comment#_rnd1577086461542`
   );
   await page.waitForSelector (oneLevelCommentsCls);
 
@@ -44,36 +46,47 @@ const crawler = async query => {
     delay: 100,
   });
   await page.click ('.form_login_register .item_btn a');
-  console.log ('already login');
-  await page.waitFor (3000);
+  console.log ('login');
+  await page.waitForNavigation();
   await page.waitForSelector (oneLevelCommentsCls + ' .list_box_in');
-  await page.$$eval (oneLevelCommentsCls, nodes => {
+  await page.waitFor(3000)
+  console.log ('already login');
+  await page.$$eval (oneLevelCommentsCls, (nodes, query) => {
     nodes.map (node => {
-      if (node.querySelector ('.WB_text').textContent.includes ('微博搞笑排行榜：1月')) {
+      if (!!node.querySelector ('.WB_text').textContent.includes (`微博搞笑排行榜：${query.month}`)) {
         node
           .querySelector ('.list_box_in .WB_text')
           .querySelectorAll ('a')
           .forEach (ele => {
+            console.log(ele.text)
             if (ele.text.includes ('回复')) {
-              ele.click ('middle');
+              ele.click ('middle', 2);
             }
           });
       }
     });
-  });
-  console.log ('展开回复');
+  }, query);
   await page.waitForSelector (twoLevelCommentsCls + ' .list_con');
-
+  await page.screenshot ({path: 'test.png', fullPage: true});
+  console.log ('展开回复');
   await (async function loadMore() {
-    for (let i=0; i<330; i++) {
-      await page.$$eval (oneLevelCommentsCls, nodes => {
+    for (let i=0; i<400; i++) {
+      let flag = await page.$$eval (oneLevelCommentsCls, (nodes, query) => {
+        let _flag = true
         nodes.map (node => {
-          if (node.querySelector ('.WB_text').textContent.includes ('微博搞笑排行榜：1月')) {
-            node.querySelector ('.list_li_v2 .WB_text a').click ();
+          if (node.querySelector ('.WB_text').textContent.includes (`微博搞笑排行榜：${query.month}`)) {
+            if(!!node.querySelector ('.list_li_v2 .WB_text')){
+              node.querySelector ('.list_li_v2 .WB_text a').click ();
+            } else {
+              _flag =  false
+            }
           }
         });
-      });
-      await page.waitFor (3000);
+        return _flag
+      }, query);
+      console.log(`展开第${i}次`, flag)
+      if(!flag) break ;
+      await page.waitFor (3500);
     }
     console.log('Done!');
   })()
@@ -92,30 +105,31 @@ const crawler = async query => {
           .getAttribute ('href');
         const content = node.textContent.trim().split('：')[1]
         data.push ([username, content, `微博主页： https:${userCenterPage}`]);
-        console.log (username, content, `微博主页： https:${userCenterPage}`);
+        // console.log (username, content, `微博主页： https:${userCenterPage}`);
         // }
       });
       return data;
     }
   );
-  await page.screenshot ({path: 'example.png', fullPage: true});
   await browser.close ();
   return _data;
 };
 
 async function main () {
-  const qurey = {
-    month: '一月',
+  const query = {
+    month: '11月',
   };
-  const data = await crawler (qurey);
+  const data = await crawler (query);
   console.log(data)
   const buffer = xlsx.build ([
     {
-      name: 'sheet1',
+      name: 'mmBirthday',
       data: data,
     },
   ]);
-  fs.writeFileSync (path.join(__dirname, "mmBirthday.xlsx"), buffer, {flag: 'w'});
+  console.log('写入Excel文件')
+  fs.writeFileSync (path.join(__dirname, `mmBirthday-${query.month}.xlsx`), buffer, {flag: 'w'});
+  console.log('写入完成')
 }
 
 main()
